@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<meta name="description" content="PrenotaAI — avviso vocale quando arriva il turno al CUP.">
+<title>PrenotaAI — Avviso turno</title>
+<style>
+:root{color-scheme:dark;--bg:#101827;--panel:#192438;--line:#2b3a52;--muted:#aab6c8;--green:#72e0b2;--amber:#ffd17a;--white:#f5f7fb}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#1d3150 0,#101827 55%);color:var(--white);font:16px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+main{width:min(720px,100%);margin:auto;padding:28px 18px 48px}.brand{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:750}.brand b{color:white}h1{font-size:clamp(32px,7vw,48px);line-height:1.04;margin:22px 0 12px;letter-spacing:-.04em}.lead{color:var(--muted);line-height:1.6;margin:0 0 24px}
+.panel{background:rgba(25,36,56,.92);border:1px solid var(--line);border-radius:22px;padding:22px;margin:16px 0;box-shadow:0 18px 50px #0003}.status{display:flex;gap:12px;align-items:center}.dot{width:11px;height:11px;border-radius:50%;background:#7d8ba1}.dot.live{background:var(--green);box-shadow:0 0 0 6px #72e0b21c}.status small,.hint{display:block;color:var(--muted);margin-top:4px;line-height:1.5}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}button{border:0;border-radius:14px;padding:14px 18px;font:700 15px system-ui;cursor:pointer}button:disabled{opacity:.4;cursor:not-allowed}.primary{background:var(--green);color:#10221d}.secondary{background:#293a55;color:white}.danger{background:#492c37;color:#ffdbe2}
+.result{border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:18px}.result.alert{border-color:var(--green);background:#16372f}.result b{display:block;font-size:20px}.result p{margin:7px 0 0;color:var(--muted);line-height:1.5}
+.steps{display:grid;gap:12px}.step{display:flex;gap:12px;color:var(--muted);line-height:1.5}.num{flex:0 0 28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#2b3a52;color:white;font-weight:700}
+.warning{font-size:13px;color:#c5ceda;line-height:1.6;border-left:3px solid var(--amber);padding-left:12px}
+footer{color:#8290a5;font-size:12px;line-height:1.6;margin:26px 4px}
+</style>
+</head>
+<body><main>
+<div class="brand"><b>Prenota</b>AI · ASSISTENTE CUP</div>
+<h1>Ti avvisiamo quando arriva il tuo turno.</h1>
+<p class="lead">Prova sperimentale di riconoscimento vocale. Avvia una chiamata, attiva il vivavoce e lascia PrenotaAI aperto mentre ascolta dal microfono.</p>
+<section class="panel">
+ <div class="status"><span class="dot" id="dot"></span><div><strong id="state">Monitoraggio fermo</strong><small id="detail">Microfono non attivo</small></div></div>
+ <div class="actions"><button class="primary" id="start">Avvia ascolto</button><button class="secondary" id="notify">Abilita notifiche</button><button class="danger" id="stop" disabled>Ferma</button></div>
+ <div class="result" id="result" role="status" aria-live="polite"><b>In attesa</b><p>Quando riconosce un annuncio che indica la posizione 2, mostra “Preparati”. Alla posizione 1 emette un avviso sonoro e una notifica.</p></div>
+</section>
+<section class="panel steps">
+ <h2 style="margin:0 0 4px">Come provarlo</h2>
+ <div class="step"><span class="num">1</span><span>Avvia la chiamata al CUP con l'app Telefono.</span></div>
+ <div class="step"><span class="num">2</span><span>Attiva il vivavoce e torna a questa pagina senza chiudere la chiamata.</span></div>
+ <div class="step"><span class="num">3</span><span>Premi “Avvia ascolto” e consenti l'accesso al microfono.</span></div>
+ <div class="step"><span class="num">4</span><span>Quando senti l'annuncio del centralino, attendi l'avviso di PrenotaAI.</span></div>
+</section>
+<p class="warning"><b>Limite importante:</b> una pagina web non può leggere direttamente l'audio interno della telefonata. Può tentare di riconoscere soltanto ciò che il microfono capta dall'altoparlante. Android può bloccare il microfono durante una chiamata e il riconoscimento vocale dipende dal browser e dalla connessione. Questa versione è una prova tecnica, non un servizio CUP operativo. Non inserire dati personali o sanitari.</p>
+<footer>PrenotaAI · Prototipo pubblico 0.5.0 · Nessuna chiamata viene avviata da questa pagina e nessun audio viene registrato o conservato da PrenotaAI.</footer>
+</main>
+<script>
+(()=> {
+ const $=id=>document.getElementById(id), SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ let rec=null,active=false,restart=null,triggered=false;
+ const set=(title,detail,live=false)=>{$('state').textContent=title;$('detail').textContent=detail;$('dot').classList.toggle('live',live);$('start').disabled=live;$('stop').disabled=!live};
+ const say=(title,body,alert=false)=>{$('result').classList.toggle('alert',alert);$('result').innerHTML='<b>'+title+'</b><p>'+body+'</p>'};
+ function stop(){active=false;clearTimeout(restart);try{rec&&rec.stop()}catch{}rec=null;set('Monitoraggio fermo','Microfono non attivo')}
+ function start(){
+  if(!SR){say('Riconoscimento non supportato','Apri il link con Chrome su Android e verifica che il browser supporti il riconoscimento vocale.');return}
+  if(active)return;active=true;triggered=false;rec=new SR();const current=rec;
+  current.lang='it-IT';current.continuous=true;current.interimResults=true;current.maxAlternatives=1;
+  current.onstart=()=>set('Ascolto attivo','Microfono in ascolto in italiano',true);
+  current.onresult=e=>{for(let i=e.resultIndex||0;i<e.results.length;i++){const r=e.results[i];if(!r.isFinal)continue;const t=(r[0]?.transcript||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,' ');const one=/(numero|posizione|attesa|in)\s*(uno|una|1)|primo|prima|tocca a lei|e il suo turno|è il suo turno/.test(t);const two=/(numero|posizione|attesa|in)\s*(due|2)|secondo|seconda/.test(t);if(one&&!triggered){triggered=true;stop();say('È il tuo turno','Il riconoscimento ha individuato un annuncio compatibile con la posizione 1. Verifica l’annuncio e torna alla chiamata.',true);try{navigator.vibrate?.([250,120,250,120,500])}catch{}try{if('Notification'in window&&Notification.permission==='granted')new Notification('PrenotaAI: è il tuo turno',{body:'Verifica l’annuncio e torna alla chiamata.'})}catch{}try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.15;o.start();o.stop(c.currentTime+.7);o.onended=()=>c.close()}catch{}return}else if(two){say('Preparati: posizione 2','Il centralino sembra aver annunciato la posizione 2. Rimani in ascolto.')}}};
+  current.onerror=e=>{const code=e.error||'errore';say('Ascolto non disponibile',code==='not-allowed'?'Permesso microfono negato. Consenti il microfono nel browser.':'Il browser non riesce a continuare il riconoscimento ('+code+').');if(['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(code))stop()};
+  current.onend=()=>{if(!active)return;set('Riconnessione','Il browser sta riavviando il riconoscimento',true);restart=setTimeout(()=>{if(active&&rec===current){try{current.start()}catch{stop()} }},800)};
+  try{current.start()}catch(e){stop();say('Impossibile avviare',e.message||'Riprova')}
+ }
+ $('start').addEventListener('click',start);$('stop').addEventListener('click',stop);
+ $('notify').addEventListener('click',async()=>{if(!('Notification'in window)){say('Notifiche non supportate','Il browser non supporta le notifiche.');return}try{const p=await Notification.requestPermission();say(p==='granted'?'Notifiche abilitate':'Notifiche non abilitate',p==='granted'?'Riceverai una notifica quando viene riconosciuta la posizione 1.':'Puoi comunque sentire l’avviso mentre la pagina è aperta.')}catch{say('Notifiche non disponibili','Impossibile richiedere il permesso.') }});
+ if(!SR){$('start').disabled=true;$('detail').textContent='Questo browser non supporta SpeechRecognition';}
+})();
+</script>
+</body></html>
