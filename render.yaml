@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: prenotaai-demo
+    runtime: node
+    plan: free
+    buildCommand: unzip -oq prenotaai-0.4.2-mobile-pwa.zip -d . && cd prenotaai-next && npm install
+    startCommand: cd prenotaai-next && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PHONE_PROVIDER
+        value: mock
+      - key: ENABLE_REAL_CALLS
+        value: "false"
+      - key: PORT
+        value: "10000"
